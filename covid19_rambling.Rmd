@@ -1,0 +1,86 @@
+---
+title: "Looking at covid-19"
+output: html_notebook
+---
+
+```{r}
+library(httr)
+req <- GET("https://covidtracking.com/api/v1/states/daily.json")
+
+data <- content(req, as = "parsed")
+length(data)
+str(data[[1]])
+```
+
+```{r, warning=FALSE}
+library(httr)
+info_req <- GET("https://covidtracking.com/api/v1/states/info.json")
+info <- content(info_req, as = "parsed")
+length(info)
+str(info[[1]])
+state_info <- rbindlist(as.list(info), fill=TRUE)
+
+
+get_state_name <- function(abbr) {
+  state_info[state_info$state == abbr]$name
+}
+
+```
+
+
+```{r}
+library(data.table)
+library(ggplot2)
+dt <- rbindlist(data, fill=TRUE)
+dt$date <- as.Date(as.character(dt$date), format = "%Y%m%d")
+dt$dateChecked <- as.POSIXct(dt$dateChecked, "%Y-%m-%dT%H:%M:%S", tz="UTC")
+dt$state <- as.factor(dt$slibrary(zoo)
+tate)
+dt$fips <- as.factor(dt$fips)
+dt <- dt[, -"hash"]
+
+str(dt[1,])
+
+picked <- dt[, c("state", "positive", "negative", "recovered","death", "total")]
+pairs(picked)
+```
+
+```{r}
+normalized <- cbind.data.frame(dt$positive/dt$totalTestResults, dt$negative/dt$totalTestResults, dt$recovered/dt$total, dt$death/dt$total)
+colnames(normalized) <- c("pos", "neg", "recovered", "dead")
+
+pairs(normalized)
+
+```
+
+```{r}
+normalized <- cbind.data.frame(dt$positive/dt$totalTestResults, dt$negative/dt$totalTestResults, dt$recovered/dt$total, log(dt$death/dt$total +1))
+colnames(normalized) <- c("pos", "neg", "recovered", "dead")
+
+pairs(normalized)
+
+levels(dt$state)
+
+```
+
+```{r}
+
+for(s in levels(dt$state)) {
+
+  by_state <- dt[dt$state == s,]
+  date_order <- order(by_state$date)
+  
+  by_state_ordered_by_date <- by_state[date_order,]
+  setnafill(by_state_ordered_by_date,type="locf", cols=c("death"))
+  
+  plot <- ggplot(by_state_ordered_by_date, aes(x=date, y=death)) +
+            geom_point(shape=1) +
+            ggtitle(get_state_name(s))
+
+  print(plot)
+    upper.lim <- ifelse(any(data$y != 0), NA, 1)
+
+}
+
+```
+
