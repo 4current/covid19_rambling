@@ -3,6 +3,8 @@ title: "Looking at covid-19"
 output: html_notebook
 ---
 
+First we have to fetch the data. The source used here is https://covidtracking.com. The provide an API for fetching data by state. In the following data chunk, we end up with a list of lists. The number of measurements is shown along with the structure of a measurement.
+
 ```{r}
 library(httr)
 req <- GET("https://covidtracking.com/api/v1/states/daily.json")
@@ -71,14 +73,29 @@ for(s in levels(dt$state)) {
   date_order <- order(by_state$date)
   
   by_state_ordered_by_date <- by_state[date_order,]
+  # to find the earliest meausrement, restrict by complete cases
+  # the date of element 0.
+  earliest_death_report <- na.omit(by_state_ordered_by_date[,c("date","death")])[1,]
+  earliest_death <- by_state_ordered_by_date[by_state_ordered_by_date$death > 0,c("date","death")][1,]
+print(data.frame(state = s, earliest_report = earliest_death_report$date, earliest_death = earliest_death$date, earliest_number =earliest_death$death ))
+
   setnafill(by_state_ordered_by_date,type="locf", cols=c("death"))
+  setnafill(by_state_ordered_by_date,type="const", fill=0, cols=c("death"))
+ 
+  integral_breaks <- function(values) {
+    breaks <- unique(floor(pretty(seq(0, 1.1 *  max(values) + 1))))
+    return(breaks)
+  }
+  y_breaks <- integral_breaks(
+    by_state_ordered_by_date$death
+  )
   
   plot <- ggplot(by_state_ordered_by_date, aes(x=date, y=death)) +
             geom_point(shape=1) +
+            scale_y_continuous(breaks = y_breaks) +
             ggtitle(get_state_name(s))
 
   print(plot)
-    upper.lim <- ifelse(any(data$y != 0), NA, 1)
 
 }
 
