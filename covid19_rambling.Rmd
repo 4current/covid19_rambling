@@ -14,6 +14,7 @@ str(data[[1]])
 
 ```{r, warning=FALSE}
 library(httr)
+library(data.table)
 info_req <- GET("https://covidtracking.com/api/v1/states/info.json")
 info <- content(info_req, as = "parsed")
 length(info)
@@ -34,8 +35,7 @@ library(ggplot2)
 dt <- rbindlist(data, fill=TRUE)
 dt$date <- as.Date(as.character(dt$date), format = "%Y%m%d")
 dt$dateChecked <- as.POSIXct(dt$dateChecked, "%Y-%m-%dT%H:%M:%S", tz="UTC")
-dt$state <- as.factor(dt$slibrary(zoo)
-tate)
+dt$state <- as.factor(dt$state)
 dt$fips <- as.factor(dt$fips)
 dt <- dt[, -"hash"]
 
