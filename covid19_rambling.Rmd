@@ -54,18 +54,13 @@ colnames(normalized) <- c("pos", "neg", "recovered", "dead")
 pairs(normalized)
 
 ```
+  
 
 ```{r}
-normalized <- cbind.data.frame(dt$positive/dt$totalTestResults, dt$negative/dt$totalTestResults, dt$recovered/dt$total, log(dt$death/dt$total +1))
-colnames(normalized) <- c("pos", "neg", "recovered", "dead")
+library(ggplot2)
+library(cowplot)
 
-pairs(normalized)
-
-levels(dt$state)
-
-```
-
-```{r}
+plot_list <- list()
 
 for(s in levels(dt$state)) {
 
@@ -90,14 +85,26 @@ print(data.frame(state = s, earliest_report = earliest_death_report$date, earlie
     by_state_ordered_by_date$death
   )
   
-  plot <- ggplot(by_state_ordered_by_date, aes(x=date, y=death)) +
+  p <- ggplot(by_state_ordered_by_date, aes(x=date, y=death)) +
             geom_point(shape=1) +
-            scale_y_continuous(breaks = y_breaks) +
-            ggtitle(get_state_name(s))
+            scale_y_continuous(breaks = y_breaks)
 
-  print(plot)
+            # ggtitle(get_state_name(s))
+
+  plot_list[[s]] <- p
 
 }
+
+step = 4
+for (i in seq(from = 1, to = length(plot_list), by = step)) {
+
+  group <- plot_list[i:(i+step-1)]
+  #print(str(group))
+  print(plot_grid(plotlist = group, ncol = 2,labels = names(group)))
+}
+
+ 
+
 
 ```
 
