@@ -105,6 +105,54 @@ for (i in seq(from = 1, to = length(plot_list), by = step)) {
 
  
 
+```
+
+Now let's look at overall population stats
+```{r}
+pop <- GET("https://api.census.gov/data/2019/pep/population?get=DATE_CODE,POP,NAME&for=STATE:*")
+popdata <- content(pop, as = "parsed")
+
+dt2 <- rbindlist(popdata[2:length(popdata)])
+colnames(dt2) <- unlist(popdata[[1]])
+
+dt2 <- dt2[dt2$DATE_CODE == 12,-c("DATE_CODE")] 
+
+dt2$POP <- as.numeric(dt2$POP)
+dt2$state <- as.factor(dt2$state)
+names(dt2)[names(dt2) == "state"] <- "fips"
+dt2[order(dt2$NAME),]
+
+ggplot(dt2, aes(x=NAME,y=POP), fill=NAME) + geom_bar(stat="identity")
+
+dt3 <- merge(dt,dt2, by="fips")
 
 ```
+
+Now we can calculate deaths per million of population.
+
+```{r}
+
+dt3[["dpm"]] <- dt3$death / dt3$POP * 1e6
+dt3
+
+```
+
+Now lets, foe each fips code, find the earliest day where dpm is >= 1 and then what is the dpm 21 days after that point.
+
+```{r}
+
+for (code in levels(dt3$fips)) {
+  selected <- dt3[dt3$fips == code,]
+  for (index in seq(along=selected$dpm)) {
+    index
+     selected[index,]$dpm
+     if ( selected[index,]$dpm >= 1 ) {
+      print(selected[index,]$state)
+      print(selected[index,]$date)
+      break
+    }  
+  }
+}
+```
+
 
