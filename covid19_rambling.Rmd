@@ -141,18 +141,66 @@ Now lets, foe each fips code, find the earliest day where dpm is >= 1 and then w
 
 ```{r}
 
+state_df <- data.frame(
+  state=character(0),
+  location_name=character(0),
+  date1m=character(0),
+  dpm21d=numeric(0)
+  )
+str(state_df)
+
 for (code in levels(dt3$fips)) {
-  selected <- dt3[dt3$fips == code,]
-  for (index in seq(along=selected$dpm)) {
-    index
-     selected[index,]$dpm
-     if ( selected[index,]$dpm >= 1 ) {
-      print(selected[index,]$state)
-      print(selected[index,]$date)
-      break
-    }  
+  if (length(dt3[dt3$fips == code,]$date) == 0) {
+    break
   }
+  print(code)
+  #print(dt3[dt3$fips == code,]$date)
+
+  by_state <- dt3[dt3$fips == code,]
+  date_order <- order(by_state$date)
+  by_state_ordered_by_date <- by_state[date_order,]
+  a <- setnafill(by_state_ordered_by_date,type="locf", cols=c("dpm"))
+  b <- setnafill(by_state_ordered_by_date,type="const", fill=0, cols=c("dpm"))
+
+  k <- Position(function(x) x > 1, by_state_ordered_by_date$dpm)
+  k21 <- k + 21
+  print(by_state_ordered_by_date[k,]$date)
+  obs <- list(
+  state=by_state_ordered_by_date[k,]$state,
+  location_name=by_state_ordered_by_date[k,]$NAME,
+  date1m=as.character(by_state_ordered_by_date[k,]$date),
+  dpm21d= by_state_ordered_by_date[k21,]$dpm
+  )
+  state_df <- rbind(state_df,obs)
 }
+state_df <- state_df[complete.cases(state_df),]
+state_dt <- data.table(state_df)
+state_dt
+
+
 ```
 
+```{r}
+data_dir <- paste(getwd(), "data", sep='/')
+temp <- tempfile()
+imhe_source <- "https://ihmecovid19storage.blob.core.windows.net/latest/ihme-covid19.zip"
+download.file(imhe_source, temp, mode="wb")
 
+data_file <- paste(data_dir, "summary_stats_all_locs.csv", sep='/')
+unzip(temp, exdir=data_dir, junkpaths=TRUE)
+dd <- read.table(data_file, sep=",", header=T)
+unlink(temp)
+```
+
+```{r}
+
+#dd_ss <- dd[,c("location_name", "any_business_start_date","all_non.ess_business_start_date")]
+dd_ss <- dd[,c("location_name", "any_business_start_date")]
+dd_ss <- dd
+state_dt2 <- merge(state_dt, dd_ss, by="location_name")
+#head(by_state_ordered_by_date)
+state_dt2$days_ld <- as.numeric(as.Date(state_dt2$any_business_start_date, '%Y-%m-%d') - as.Date(state_dt2$date1m))
+state_dt2
+
+ggplot(state_dt2, aes(x=days_ld, y=dpm21d)) + geom_point(shape=1) 
+```
