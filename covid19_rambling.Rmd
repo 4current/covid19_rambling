@@ -149,7 +149,6 @@ state_df <- data.frame(
   )
 str(state_df)
 
-
 for (code in levels(dt3$fips)) {
   if (length(dt3[dt3$fips == code,]$date) == 0) {
     break
