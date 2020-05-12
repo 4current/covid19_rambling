@@ -186,7 +186,7 @@ temp <- tempfile()
 imhe_source <- "https://ihmecovid19storage.blob.core.windows.net/latest/ihme-covid19.zip"
 download.file(imhe_source, temp, mode="wb")
 
-data_file <- paste(data_dir, "summary_stats_all_locs.csv", sep='/')
+data_file <- paste(data_dir, "Summary_stats_all_locs.csv", sep='/')
 unzip(temp, exdir=data_dir, junkpaths=TRUE)
 dd <- read.table(data_file, sep=",", header=T)
 unlink(temp)
