@@ -64,17 +64,12 @@ library(dplyr)
 library(countrycode)
 
 bloodTypeCleanup01 <- bloodTypeDataFrame %>%
-  slice(-1,-dim(bloodTypeDataFrame```{r}
-plot(normalizedDataFrame$D,normalizedDataFrame$case_fatality)
-modelD2 <- lm(case_fatality ~ D, data=normalizedDataFrame)
-abline(modelD2)
-
-```)[1])
+  slice(-1,-dim(bloodTypeDataFrame)[1])
 names(bloodTypeCleanup01) <- c("country","population","o+","a+","b+","ab+","o-","a-","b-","ab-")
 bloodTypeCleanup02 <- bloodTypeCleanup01 %>%
   mutate(
     country=sub("\\[[0-9]+\\]$","",country),
-    population=as.numeric(gsub(D",", "",population))
+    population=as.numeric(gsub(",", "",population))
     ) %>%
   mutate_at(c("o+","a+","b+","ab+","o-","a-","b-","ab-"), ~ as.numeric(sub("%$","", .x)) / 100 ) %>%
   mutate(country_code=countrycode(country, origin="country.name", destination="iso3c"))
