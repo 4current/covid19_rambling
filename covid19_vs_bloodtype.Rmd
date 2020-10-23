@@ -31,12 +31,28 @@ library(dplyr)
 library(countrycode)
 
 whoLatestInfo <- whoDataFrame %>%
-    mutate(Date_reported=as.Date(Date_reported, format = "%Y-%m-%d"),
-           country_code=if_else(Country_code=="XK","XXK", countrycode(Country_code, origin="iso2c", destination="iso3c", nomatch=NULL))) %>%
-    group_by(Country_code) %>%
-    arrange(Date_reported, by_group=TRUE) %>%
-    slice_tail() %>%
-  filter(Country != "Other")
+    rename_all(tolower) %>%
+    mutate(date_reported=as.Date(date_reported, format = "%Y-%m-%d")) %>%
+    filter(country != "Other") %>%
+    mutate(country=if_else(
+      country_code=="XK",
+      "Kosovo",
+      countrycode(country_code, origin="iso2c",
+                  destination="country.name",
+                  nomatch=NULL)
+    )
+    ) %>%
+    mutate(country_code=if_else(
+             country_code=="XK",
+             "XXK",
+             countrycode(country_code, origin="iso2c",
+                         destination="iso3c",
+                         nomatch=NULL)
+             )
+           ) %>%
+    group_by(country_code) %>%
+    arrange(date_reported, by_group=TRUE) %>%
+    slice_tail()
 
 ```
 
@@ -65,42 +81,90 @@ library(countrycode)
 
 bloodTypeCleanup01 <- bloodTypeDataFrame %>%
   slice(-1,-dim(bloodTypeDataFrame)[1])
-names(bloodTypeCleanup01) <- c("country","population","o+","a+","b+","ab+","o-","a-","b-","ab-")
+
+names(bloodTypeCleanup01) <- c("country","population","o_pos","a_pos","b_pos","ab_pos","o_neg","a_neg","b_neg","ab_neg")
 bloodTypeCleanup02 <- bloodTypeCleanup01 %>%
   mutate(
     country=sub("\\[[0-9]+\\]$","",country),
     population=as.numeric(gsub(",", "",population))
     ) %>%
-  mutate_at(c("o+","a+","b+","ab+","o-","a-","b-","ab-"), ~ as.numeric(sub("%$","", .x)) / 100 ) %>%
+  mutate_at(c("o_pos","a_pos","b_pos","ab_pos","o_neg","a_neg","b_neg","ab_neg"), ~ as.numeric(sub("%$","", .x)) / 100 ) %>%
+  mutate(country=countrycode(country, origin="country.name", destination="country.name")) %>%
   mutate(country_code=countrycode(country, origin="country.name", destination="iso3c"))
   
-workingDataFrame <- inner_join(whoLatestInfo, bloodTypeCleanup02, by="country_code")
 ```
 
-Now let's clean up the table and start building our model. First, we need to normalize the covid statistics by population in cases per 100,000 of population.
+Explore the data a little.
+
+
+
+
+Now let's clean up the table and start building our model. When we do the join we lose Hong Kong, Macau and Taiwan because The WHO does not recognize these countries as separate from China. First, we need to normalize the covid statistics by population in cases per 100,000 of population.
 
 ```{r}
+
+workingDataFrame <- inner_join(whoLatestInfo, bloodTypeCleanup02,by=c("country", "country_code"))
 
 ck <- 100000
 normalizedDataFrame <- workingDataFrame %>%
   mutate(
-    cases_per_100k = round(Cumulative_cases / population * ck),
-    deaths_per_100k = round(Cumulative_deaths / population * ck),
-    A = `o+` + `o-` + `b+` + `b-`,
-    B = `o+` + `o-` + `a+` + `a-`,
-    D = `o-` + `a-` + `b-`,
-    case_fatality = Cumulative_deaths / Cumulative_cases
+    cases_per_100k = round(cumulative_cases / population * ck),
+    deaths_per_100k = round(cumulative_deaths / population * ck),
+    A = o_pos + o_neg + b_pos + b_neg,
+    B = o_pos + o_neg + a_pos + a_neg,
+    D = o_neg + a_neg + b_neg,
+    A_B_ratio = A / B,
+    case_fatality = ifelse(cumulative_cases > 0, cumulative_deaths / cumulative_cases, 0)
     )
 
+```
+
+
+```{r}
 plot(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 modelA <- lm(cases_per_100k ~ A, data=normalizedDataFrame)
 abline(modelA)
 
 ```
+First - it seems that there are some obvious outliers. Let's remove them.
 
 ```{r}
-plot(normalizedDataFrame$B,normalizedDataFrame$cases_per_100k)
-modelB <- lm(cases_per_100k ~ B, data=normalizedDataFrame)
+#find absolute value of z-score for each value in each column
+subDF <- normalizedDataFrame[,c("cases_per_100k","deaths_per_100k", "case_fatality")]
+z_scores <- as.data.frame(sapply(subDF, function(subDF) (abs(subDF-mean(subDF))/sd(subDF))))
+
+trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3),]
+
+```
+
+
+
+```{r}
+library(rworldmap)
+c19Map <- joinCountryData2Map(trimmedDataFrame, joinCode="ISO3", nameJoinColumn="country_code")
+
+mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+```
+
+
+
+```{r}
+plot(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
+modelB <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
+abline(modelA)
+
+
+```
+
+
+
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
+modelB <- lm(cases_per_100k ~ B, data=trimmedDataFrame)
 abline(modelB)
 
 
@@ -108,35 +172,49 @@ abline(modelB)
 
   
 ```{r}
-plot(normalizedDataFrame$D,normalizedDataFrame$cases_per_100k)
-modelD <- lm(cases_per_100k ~ D, data=normalizedDataFrame)
+plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+modelD <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
 abline(modelD)
 
 ```
 
 ```{r}
-plot(normalizedDataFrame$A,normalizedDataFrame$case_fatality)
-modelA2 <- lm(case_fatality ~ A, data=normalizedDataFrame)
+plot(trimmedDataFrame$A,trimmedDataFrame$case_fatality)
+modelA2 <- lm(case_fatality ~ A, data=trimmedDataFrame)
 abline(modelA2)
 
 ```
 ```{r}
-plot(normalizedDataFrame$B,normalizedDataFrame$case_fatality)
-modelB2 <- lm(case_fatality ~ B, data=normalizedDataFrame)
+plot(trimmedDataFrame$B,trimmedDataFrame$case_fatality)
+modelB2 <- lm(case_fatality ~ B, data=trimmedDataFrame)
 abline(modelB2)
 
 ```
 ```{r}
-plot(normalizedDataFrame$D,normalizedDataFrame$case_fatality)
-modelD2 <- lm(case_fatality ~ D, data=normalizedDataFrame)
+plot(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
+modelD2 <- lm(case_fatality ~ D, data=trimmedDataFrame)
 abline(modelD2)
 
 ```
 ```{r}
-plot(normalizedDataFrame$`o+`,normalizedDataFrame$case_fatality)
-modelO2 <- lm(case_fatality ~ `o+`, data=normalizedDataFrame)
+plot(trimmedDataFrame$o_pos,trimmedDataFrame$case_fatality)
+modelO2 <- lm(case_fatality ~ o_pos, data=trimmedDataFrame)
 abline(modelO2)
 
 ```
 
+```{r}
+plot(trimmedDataFrame$A_B_ratio,trimmedDataFrame$cases_per_100k)
+modelABR <- lm(cases_per_100k ~ A_B_ratio, data=trimmedDataFrame)
+abline(modelABR)
+
+```
+
+
+```{r}
+plot(trimmedDataFrame$A_B_ratio,trimmedDataFrame$case_fatality)
+modelABR <- lm(case_fatality ~ A_B_ratio, data=trimmedDataFrame)
+abline(modelABR)
+
+```
 
