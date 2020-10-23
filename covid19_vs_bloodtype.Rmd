@@ -112,12 +112,16 @@ normalizedDataFrame <- workingDataFrame %>%
     deaths_per_100k = round(cumulative_deaths / population * ck,digits=2),
     A = o_pos + o_neg + b_pos + b_neg,
     B = o_pos + o_neg + a_pos + a_neg,
-    D = o_neg + a_neg + b_neg,
+    D = o_neg + a_neg + b_neg + ab_neg,
     A_B_ratio = A / B,
     case_fatality = ifelse(cumulative_cases > 0, cumulative_deaths / cumulative_cases, 0)
     )
 
 ```
+
+
+
+
 
 
 
@@ -162,7 +166,7 @@ pairs(~ cases_per_100k + deaths_per_100k + case_fatality + A + B + D, data=trimm
 
 ```{r}
 plot(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
-modelB <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
+modelA <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
 abline(modelA)
 cor(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
 
