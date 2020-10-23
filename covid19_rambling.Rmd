@@ -1,6 +1,10 @@
 ---
 title: "Looking at covid-19"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
 ---
 
 First we have to fetch the data. The source used here is https://covidtracking.com. The provide an API for fetching data by state. In the following data chunk, we end up with a list of lists. The number of measurements is shown along with the structure of a measurement.
