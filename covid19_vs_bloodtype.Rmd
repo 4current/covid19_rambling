@@ -108,8 +108,8 @@ workingDataFrame <- inner_join(whoLatestInfo, bloodTypeCleanup02,by=c("country",
 ck <- 100000
 normalizedDataFrame <- workingDataFrame %>%
   mutate(
-    cases_per_100k = round(cumulative_cases / population * ck),
-    deaths_per_100k = round(cumulative_deaths / population * ck),
+    cases_per_100k = round(cumulative_cases / population * ck,digits=2),
+    deaths_per_100k = round(cumulative_deaths / population * ck,digits=2),
     A = o_pos + o_neg + b_pos + b_neg,
     B = o_pos + o_neg + a_pos + a_neg,
     D = o_neg + a_neg + b_neg,
@@ -120,10 +120,12 @@ normalizedDataFrame <- workingDataFrame %>%
 ```
 
 
+
 ```{r}
 plot(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 modelA <- lm(cases_per_100k ~ A, data=normalizedDataFrame)
 abline(modelA)
+cor(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 
 ```
 First - it seems that there are some obvious outliers. Let's remove them.
@@ -133,7 +135,9 @@ First - it seems that there are some obvious outliers. Let's remove them.
 subDF <- normalizedDataFrame[,c("cases_per_100k","deaths_per_100k", "case_fatality")]
 z_scores <- as.data.frame(sapply(subDF, function(subDF) (abs(subDF-mean(subDF))/sd(subDF))))
 
-trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3),]
+nonzero <- (subDF$cases_per_100k > 0) & (subDF$deaths_per_100k > 0)
+
+trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3) & nonzero,]
 
 ```
 
@@ -149,12 +153,18 @@ mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
 ```
 
 
+```{r}
+
+pairs(~ cases_per_100k + deaths_per_100k + case_fatality + A + B + D, data=trimmedDataFrame)
+
+```
+
 
 ```{r}
 plot(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
 modelB <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
 abline(modelA)
-
+cor(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
 
 ```
 
@@ -166,7 +176,7 @@ abline(modelA)
 plot(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
 modelB <- lm(cases_per_100k ~ B, data=trimmedDataFrame)
 abline(modelB)
-
+cor(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
 
 ```
 
@@ -175,7 +185,7 @@ abline(modelB)
 plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
 modelD <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
 abline(modelD)
-
+cor(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
 ```
 
 ```{r}
@@ -207,6 +217,7 @@ abline(modelO2)
 plot(trimmedDataFrame$A_B_ratio,trimmedDataFrame$cases_per_100k)
 modelABR <- lm(cases_per_100k ~ A_B_ratio, data=trimmedDataFrame)
 abline(modelABR)
+cor(trimmedDataFrame$A_B_ratio,trimmedDataFrame$cases_per_100k)
 
 ```
 
