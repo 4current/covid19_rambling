@@ -7,6 +7,9 @@ output:
   pdf_document: default
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
 # Introduction
 Two recent studies found a correlation between blood type and the susceptibility 
 of patients to SARS-CoV-2 and the severity of symptoms. The [first study](https://ashpublications.org/bloodadvances/article/4/20/4990/463793/Reduced-prevalence-of-SARS-CoV-2-infection-in-ABO) by Danish researchers found: 
@@ -244,8 +247,9 @@ tidy(modelB1f)
 ```{r}
 plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
 modelD1 <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
-abline(modelD)
+abline(modelD1)
 cor(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+tidy(modelD1)
 ```
 
 
@@ -254,6 +258,7 @@ plot(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
 modelD1d <- lm(deaths_per_100k ~ D, data=trimmedDataFrame)
 abline(modelD1d)
 cor(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
+tidy(modelD1d)
 ```
 
 
@@ -262,7 +267,18 @@ plot(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
 modelD1f <- lm(case_fatality ~ D, data=trimmedDataFrame)
 abline(modelD1f)
 cor(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
+tidy(modelD1f)
 ```
+
+# Summary
+
+The prevalence of A antibody in a population shows a very weak negative correlation with cumulative case counts and be prevalence of B antibody seems to have a weak positive correlation. Perhaps it would have been better to stick with blood types first to validate the cited studies. However, the negative correlation is consistent with the medical findings.
+
+More surprisingly, however, is that there seems to be an even stronger positive correlation with the B antibody which supports an A blood type disadvantage but not an AB blood type disadvantage. 
+
+The Rh factor was included with this analysis. Having the D antibody seems to be a disadvantage for resistance to infection buy is entirely uncorrelated with case fatality. 
+
+Following up, I'd like to add other demographic factors such as quality of health care, population density, measures of wealth, ubanization, land area, etc. and do a multivariate analysis with re-sampled data to eliminate the other factors.
 
 
 
