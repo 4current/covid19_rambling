@@ -1,15 +1,40 @@
 ---
-title: "A Regression Analysis of Covid19 VS. Blood Type"
+title: A Regression Analysis of Covid-19 Case Count vs. Blood Type Prevalence
+author: Richard A. Morrisey
 output:
-  html_document:
-    df_print: paged
+  html_document: default
   html_notebook: default
   pdf_document: default
 ---
 
-Fetch data from the WHO website
+# Introduction
+Two recent studies found a correlation between blood type and the susceptibility 
+of patients to SARS-CoV-2 and the severity of symptoms. The [first study](https://ashpublications.org/bloodadvances/article/4/20/4990/463793/Reduced-prevalence-of-SARS-CoV-2-infection-in-ABO) by Danish researchers found: 
 
-```{r}
+ * Blood group O is associated with a decreased risk for contracting SARS-CoV-2 infection.
+ 
+The [second study](https://ashpublications.org/bloodadvances/article/4/20/4981/464437/The-association-of-ABO-blood-group-with-indices-of) by British researchers showed:
+
+ * COVID-19 patients with blood group A or AB are at increased risk for requiring mechanical ventilation vs those with blood group O or B.
+ * COVID-19 patients with blood group A or AB appear to exhibit a greater disease severity than patients with blood group O or B.
+ 
+ Taken together, this seems to indicate that individuals with the A-antibody in their blood serum have some protection against the virus. This is because type-O individuals have both A and B antibodies and type-B has only the A but not the B antibody in their blood serum, i.e. both groups _have_ the A antibody. Whereas,  Both groups A and AB both exhibit greater disease severity according to the second study and also _lack_ the A antibody. Or, conversely, groups O and B which have the A antibody have less severe symptoms.
+ 
+ Since blood type prevalence varies depending on the region of the world and ethnic types, another possible way to demonstrate this dependency would be to compare COVID-19 cumulative case and death statistics by region across the globe to the A antigen prevalence for each region. Because statistics are collected by country and not ethnic type, we are limited to doing this analysis on a country by country basis.
+ 
+ In this report, I would like to do a simple linear regression to determine the feasibility of this approach and use this as a first step in a more sophisticated multivariate analysis. 
+ 
+# Method 
+   
+   For this analysis I'll make use of the WHO COVID-19 global data website (the link is indicated in the embedded code) for blood types, there does not seem to be an easily obtainable single resource for a by-country listing so it seems that authors on the Wikipedia website have compiled such a table with references on a country-by-country basis.
+   
+   After collecting both sets of data, I'll correlate them by country and do a regression analysis for cumulative cases per 100K, death_rate per 100K and case mortality per 100k against the prevalence of A antibody types in the population.
+
+# Analysis
+
+Below we fetch data from the WHO website
+
+```{r get_covid19_stats, cache=TRUE}
 whoDataArtifact <- "WHO-COVID-19-global-data.csv"
 whoSource <- "https://covid19.who.int"
 localDataDir <- "data"
@@ -26,7 +51,7 @@ whoDataFrame <- read.csv(filePath,na.strings=c())
 ```
 Now that we have the data let's get the latest info.
 
-```{r}
+```{r clean_covid19_data}
 library(dplyr)
 library(countrycode)
 
@@ -56,9 +81,9 @@ whoLatestInfo <- whoDataFrame %>%
 
 ```
 
-So now let's get blood type info ...
+So now let's get blood type info ... Here we are scraping a table from Wikipedia.
 
-```{r}
+```{r get_blood_stats, cache=TRUE}
 library(RCurl)
 library(XML)
 library(rlist)
@@ -70,12 +95,12 @@ bloodTypeDataFrame <- tables[[grep("ABO and Rh blood type distribution", names(t
 ```
 
 But we need to clean up this table.
-* The first row is the colunn names we'll remove that and replace with clean names.
+* The first row is the column names we'll remove that and replace with clean names.
 * The last row is for the world - we don't need that either
 * the percentages have % and are scaled by 100 so we need to renormalize.
 * The countries have reference brackets - we need to clean those.
 
-```{r}
+```{r clean_blood_data}
 library(dplyr)
 library(countrycode)
 
@@ -94,14 +119,10 @@ bloodTypeCleanup02 <- bloodTypeCleanup01 %>%
   
 ```
 
-Explore the data a little.
 
+Now let's clean up the table and start building our model. When we do the join we lose Hong Kong, Macao and Taiwan because The WHO does not recognize these countries as separate from China. First, we need to normalize the covid statistics by population in cases per 100,000 of population.
 
-
-
-Now let's clean up the table and start building our model. When we do the join we lose Hong Kong, Macau and Taiwan because The WHO does not recognize these countries as separate from China. First, we need to normalize the covid statistics by population in cases per 100,000 of population.
-
-```{r}
+```{r join_and_new_factors}
 
 workingDataFrame <- inner_join(whoLatestInfo, bloodTypeCleanup02,by=c("country", "country_code"))
 
@@ -113,22 +134,20 @@ normalizedDataFrame <- workingDataFrame %>%
     A = o_pos + o_neg + b_pos + b_neg,
     B = o_pos + o_neg + a_pos + a_neg,
     D = o_neg + a_neg + b_neg + ab_neg,
-    A_B_ratio = A / B,
     case_fatality = ifelse(cumulative_cases > 0, cumulative_deaths / cumulative_cases, 0)
     )
 
 ```
 
 
-
-
-
-
+First plot. Now we can get an initial look at 
 
 ```{r}
+library(broom)
 plot(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 modelA <- lm(cases_per_100k ~ A, data=normalizedDataFrame)
 abline(modelA)
+tidy(modelA)
 cor(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 
 ```
@@ -151,7 +170,14 @@ trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3) & nonzero,]
 library(rworldmap)
 c19Map <- joinCountryData2Map(trimmedDataFrame, joinCode="ISO3", nameJoinColumn="country_code")
 
+
 mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+mapCountryData(c19Map, nameColumnToPlot="deaths_per_100k", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+mapCountryData(c19Map, nameColumnToPlot="A", catMethod = "pretty",
   missingCountryCol = gray(.8))
 
 ```
@@ -217,19 +243,5 @@ abline(modelO2)
 
 ```
 
-```{r}
-plot(trimmedDataFrame$A_B_ratio,trimmedDataFrame$cases_per_100k)
-modelABR <- lm(cases_per_100k ~ A_B_ratio, data=trimmedDataFrame)
-abline(modelABR)
-cor(trimmedDataFrame$A_B_ratio,trimmedDataFrame$cases_per_100k)
 
-```
-
-
-```{r}
-plot(trimmedDataFrame$A_B_ratio,trimmedDataFrame$case_fatality)
-modelABR <- lm(case_fatality ~ A_B_ratio, data=trimmedDataFrame)
-abline(modelABR)
-
-```
 
