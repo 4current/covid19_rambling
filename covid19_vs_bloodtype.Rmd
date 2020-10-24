@@ -151,25 +151,21 @@ tidy(modelA)
 cor(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
 
 ```
-First - it seems that there are some obvious outliers. Let's remove them.
+Now it  seems that there are some obvious outliers. Let's remove them by trimming those exceeding 3 standard deviations. Also, we are removing countries with no cases they could be this way because the country is too small, they have not been exposed to the virus, or the are failing to provide accurate reports.
 
 ```{r}
 #find absolute value of z-score for each value in each column
 subDF <- normalizedDataFrame[,c("cases_per_100k","deaths_per_100k", "case_fatality")]
 z_scores <- as.data.frame(sapply(subDF, function(subDF) (abs(subDF-mean(subDF))/sd(subDF))))
-
 nonzero <- (subDF$cases_per_100k > 0) & (subDF$deaths_per_100k > 0)
-
 trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3) & nonzero,]
-
 ```
 
-
+Now we would like to explore the data. First let's do some pretty maps.
 
 ```{r}
 library(rworldmap)
 c19Map <- joinCountryData2Map(trimmedDataFrame, joinCode="ISO3", nameJoinColumn="country_code")
-
 
 mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
   missingCountryCol = gray(.8))
@@ -177,71 +173,97 @@ mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
 mapCountryData(c19Map, nameColumnToPlot="deaths_per_100k", catMethod = "pretty",
   missingCountryCol = gray(.8))
 
+mapCountryData(c19Map, nameColumnToPlot="case_fatality", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
 mapCountryData(c19Map, nameColumnToPlot="A", catMethod = "pretty",
   missingCountryCol = gray(.8))
 
 ```
 
+Now let's do a quick look at the relationship between pairs.
 
 ```{r}
 
 pairs(~ cases_per_100k + deaths_per_100k + case_fatality + A + B + D, data=trimmedDataFrame)
 
 ```
-
+Finally, let's repeat the regression on the outlier trimmed data.
 
 ```{r}
 plot(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
-modelA <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
-abline(modelA)
+modelA1 <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
+abline(modelA1)
 cor(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
-
+tidy(modelA1)
 ```
 
-
-
-
-
 ```{r}
-plot(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
-modelB <- lm(cases_per_100k ~ B, data=trimmedDataFrame)
-abline(modelB)
-cor(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
-
-```
-
-  
-```{r}
-plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
-modelD <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
-abline(modelD)
-cor(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+plot(trimmedDataFrame$A,trimmedDataFrame$deaths_per_100k)
+modelA1d <- lm(deaths_per_100k ~ A, data=trimmedDataFrame)
+abline(modelA1d)
+cor(trimmedDataFrame$A,trimmedDataFrame$deaths_per_100k)
+tidy(modelA1d)
 ```
 
 ```{r}
 plot(trimmedDataFrame$A,trimmedDataFrame$case_fatality)
-modelA2 <- lm(case_fatality ~ A, data=trimmedDataFrame)
-abline(modelA2)
-
+modelA1f <- lm(case_fatality ~ A, data=trimmedDataFrame)
+abline(modelA1f)
+cor(trimmedDataFrame$A,trimmedDataFrame$case_fatality)
+tidy(modelA1f)
 ```
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
+modelB1 <- lm(cases_per_100k ~ B, data=trimmedDataFrame)
+abline(modelB1)
+cor(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
+tidy(modelB1)
+```
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$deaths_per_100k)
+modelB1d <- lm(deaths_per_100k ~ B, data=trimmedDataFrame)
+abline(modelB1d)
+cor(trimmedDataFrame$B,trimmedDataFrame$deaths_per_100k)
+tidy(modelB1d)
+```
+
+
 ```{r}
 plot(trimmedDataFrame$B,trimmedDataFrame$case_fatality)
-modelB2 <- lm(case_fatality ~ B, data=trimmedDataFrame)
-abline(modelB2)
-
+modelB1f <- lm(case_fatality ~ B, data=trimmedDataFrame)
+abline(modelB1f)
+cor(trimmedDataFrame$B,trimmedDataFrame$case_fatality)
+tidy(modelB1f)
 ```
+  
+```{r}
+plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+modelD1 <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
+abline(modelD)
+cor(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+```
+
+
+```{r}
+plot(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
+modelD1d <- lm(deaths_per_100k ~ D, data=trimmedDataFrame)
+abline(modelD1d)
+cor(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
+```
+
+
 ```{r}
 plot(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
-modelD2 <- lm(case_fatality ~ D, data=trimmedDataFrame)
-abline(modelD2)
-
+modelD1f <- lm(case_fatality ~ D, data=trimmedDataFrame)
+abline(modelD1f)
+cor(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
 ```
-```{r}
-plot(trimmedDataFrame$o_pos,trimmedDataFrame$case_fatality)
-modelO2 <- lm(case_fatality ~ o_pos, data=trimmedDataFrame)
-abline(modelO2)
 
-```
 
 
 
