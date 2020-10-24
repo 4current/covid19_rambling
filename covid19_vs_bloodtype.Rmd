@@ -16,7 +16,7 @@ of patients to SARS-CoV-2 and the severity of symptoms. The [first study](https:
 
  * Blood group O is associated with a decreased risk for contracting SARS-CoV-2 infection.
  
-The [second study](https://ashpublications.org/bloodadvances/article/4/20/4981/464437/The-association-of-ABO-blood-group-with-indices-of) by British researchers showed:
+The [second study](https://ashpublications.org/bloodadvances/article/4/20/4981/464437/The-association-of-ABO-blood-group-with-indices-of) by Canadian researchers showed:
 
  * COVID-19 patients with blood group A or AB are at increased risk for requiring mechanical ventilation vs those with blood group O or B.
  * COVID-19 patients with blood group A or AB appear to exhibit a greater disease severity than patients with blood group O or B.
