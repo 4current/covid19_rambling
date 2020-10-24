@@ -98,10 +98,11 @@ bloodTypeDataFrame <- tables[[grep("ABO and Rh blood type distribution", names(t
 ```
 
 But we need to clean up this table.
-* The first row is the column names we'll remove that and replace with clean names.
-* The last row is for the world - we don't need that either
-* the percentages have % and are scaled by 100 so we need to renormalize.
-* The countries have reference brackets - we need to clean those.
+
+ * The first row is the column names we'll remove that and replace with clean names.
+ * The last row is for the world - we don't need that either
+ * the percentages have % and are scaled by 100 so we need to renormalize.
+ * The countries have reference brackets - we need to clean those.
 
 ```{r clean_blood_data}
 library(dplyr)
@@ -274,7 +275,7 @@ tidy(modelD1f)
 
 The prevalence of A antibody in a population shows a very weak negative correlation with cumulative case counts and be prevalence of B antibody seems to have a weak positive correlation. Perhaps it would have been better to stick with blood types first to validate the cited studies. However, the negative correlation is consistent with the medical findings.
 
-More surprisingly, however, is that there seems to be an even stronger positive correlation with the B antibody which supports an A blood type disadvantage but not an AB blood type disadvantage. 
+More surprisingly, however, is that there seems to be an even stronger positive correlation with the B antibody which supports an A blood type disadvantage but not an AB blood type disadvantage. I have recently noticed this older study in [New England Journal of Medicine](https://www.nejm.org/doi/10.1056/NEJMoa2020283) that specifically points out type A blood as being more susceptible to the disease. That would be B antibody serum and that agrees with the positive correlation seen here.
 
 The Rh factor was included with this analysis. Having the D antibody seems to be a disadvantage for resistance to infection buy is entirely uncorrelated with case fatality. 
 
