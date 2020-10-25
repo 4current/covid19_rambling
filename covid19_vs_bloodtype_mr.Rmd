@@ -1,0 +1,366 @@
+---
+title: A Regression Analysis of Covid-19 Case Count vs. Blood Type Prevalence
+author: Richard A. Morrisey
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+# Introduction
+Two recent studies found a correlation between blood type and the susceptibility 
+of patients to SARS-CoV-2 and the severity of symptoms. The [first study](https://ashpublications.org/bloodadvances/article/4/20/4990/463793/Reduced-prevalence-of-SARS-CoV-2-infection-in-ABO) by Danish researchers found: 
+
+ * Blood group O is associated with a decreased risk for contracting SARS-CoV-2 infection.
+ 
+The [second study](https://ashpublications.org/bloodadvances/article/4/20/4981/464437/The-association-of-ABO-blood-group-with-indices-of) by Canadian researchers showed:
+
+ * COVID-19 patients with blood group A or AB are at increased risk for requiring mechanical ventilation vs those with blood group O or B.
+ * COVID-19 patients with blood group A or AB appear to exhibit a greater disease severity than patients with blood group O or B.
+ 
+ Taken together, this seems to indicate that individuals with the A-antibody in their blood serum have some protection against the virus. This is because type-O individuals have both A and B antibodies and type-B has only the AaugmentedDataFrame$date_reported <- NULL but not the B antibody in their blood serum, i.e. both groups _have_ the A antibody. Whereas,  Both groups A and AB both exhibit greater disease severity according to the second study and also _lack_ the A antibody. Or, conversely, groups O and B which have the A antibody have less severe symptoms.
+ 
+ Since blood type prevalence varies depending on the region of the world and ethnic types, another possible way to demonstrate this dependency would be to compare COVID-19 cumulative case and death statistics by region across the globe to the A antigen prevalence for each region. Because statistics are collected by country and not ethnic type, we are limited to doing this analysis on a country by country basis.
+ 
+ In this report, I would like to do a simple linear regression to determine the feasibility of this approach and use this as a first step in a more sophisticated multivariate analysis. 
+ 
+# Method 
+   
+   For this analysis I'll make use of the WHO COVID-19 global data website (the link is indicated in the embedded code) for blood types, there does not seem to be an easily obtainable single resource for a by-country listing so it seems that authors on the Wikipedia website have compiled such a table with references on a country-by-country basis.
+   
+   After collecting both sets of data, I'll correlate them by country and do a regression analysis for cumulative cases per 100K, death_rate per 100K and case mortality per 100k against the prevalence of A antibody types in the population.
+
+# Analysis
+
+Below we fetch data from the WHO website
+
+```{r get_covid19_stats, cache=TRUE}
+whoDataArtifact <- "WHO-COVID-19-global-data.csv"
+whoSource <- "https://covid19.who.int"
+localDataDir <- "data"
+urlEndpoint <- paste(whoSource, whoDataArtifact, sep="/")
+filePath <- paste(localDataDir, whoDataArtifact, sep="/")
+download.file(urlEndpoint, filePath)
+
+# We need to be careful of Namibia whose 2-letter country code is "NA"
+# As it turns out, read.csv by default sets na.strings=c("NA")
+# so turn this off with na.strings=c() and mutate to three letter codes before
+# joining
+whoDataFrame <- read.csv(filePath,na.strings=c())
+
+```
+Now that we have the data let's get the latest info.
+
+```{r clean_covid19_data}
+library(dplyr)
+library(countrycode)
+
+whoLatestInfo <- whoDataFrame %>%
+    rename_all(tolower) %>%
+    mutate(date_reported=as.Date(date_reported, format = "%Y-%m-%d")) %>%
+    filter(country != "Other") %>%
+    mutate(country=if_else(
+      country_code=="XK",
+      "Kosovo",
+      countrycode(country_code, origin="iso2c",
+                  destination="country.name",
+                  nomatch=NULL)
+    )
+    ) %>%
+    mutate(country_code=if_else(
+             country_code=="XK",
+             "XXK",
+             countrycode(country_code, origin="iso2c",
+                         destination="iso3c",
+                         nomatch=NULL)
+             )
+           ) %>%
+    group_by(country_code) %>%
+    arrange(date_reported, by_group=TRUE) %>%
+    slice_tail()
+
+```
+
+So now let's get blood rtype info ... Here we are scraping a table from Wikipedia.
+
+```{r get_blood_stats, cache=TRUE}
+library(RCurl)
+library(XML)
+library(rlist)
+bloodTypesUrl <- "https://en.wikipedia.org/wiki/Blood_type_distribution_by_country"
+htmlContent <- getURL(bloodTypesUrl)
+tables <- readHTMLTable(htmlContent)
+tables <- list.clean(tables, fun = is.null, recursive = FALSE)
+bloodTypeDataFrame <- tables[[grep("ABO and Rh blood type distribution", names(tables))]]
+```
+
+But we need to clean up this table.
+
+ * The first row is the column names we'll remove that and replace with clean names.
+ * The last row is for the world - we don't need that either
+ * the percentages have % and are scaled by 100 so we need to renormalize.
+ * The countries have reference brackets - we need to clean those.
+
+```{r clean_blood_data}
+library(dplyr)
+library(countrycode)
+
+bloodTypeCleanup01 <- bloodTypeDataFrame %>%
+  slice(-1,-dim(bloodTypeDataFrame)[1])
+
+names(bloodTypeCleanup01) <- c("country","population","o_pos","a_pos","b_pos","ab_pos","o_neg","a_neg","b_neg","ab_neg")
+bloodTypeCleanup02 <- bloodTypeCleanup01 %>%
+  mutate(
+    country=sub("\\[[0-9]+\\]$","",country),
+    population=as.numeric(gsub(",", "",population))
+    ) %>%
+  mutate_at(c("o_pos","a_pos","b_pos","ab_pos","o_neg","a_neg","b_neg","ab_neg"), ~ as.numeric(sub("%$","", .x)) / 100 ) %>%
+  mutate(country=countrycode(country, origin="country.name", destination="country.name")) %>%
+  mutate(country_code=countrycode(country, origin="country.name", destination="iso3c"))
+  
+```
+
+
+Now let's clean up the table and start building our model. When we do the join we lose Hong Kong, Macao and Taiwan because The WHO does not recognize these countries as separate from China. First, we need to normalize the covid statistics by population in cases per 100,000 of population.
+
+```{r join_and_new_factors}
+
+workingDataFrame <- inner_join(whoLatestInfo, bloodTypeCleanup02,by=c("country", "country_code"))
+
+ck <- 100000
+normalizedDataFrame <- workingDataFrame %>%
+  mutate(
+    cases_per_100k = round(cumulative_cases / population * ck,digits=2),
+    deaths_per_100k = round(cumulative_deaths / population * ck,digits=2),
+    A = o_pos + o_neg + b_pos + b_neg,
+    B = o_pos + o_neg + a_pos + a_neg,
+    D = o_neg + a_neg + b_neg + ab_neg,
+    case_fatality = ifelse(cumulative_cases > 0, cumulative_deaths / cumulative_cases, 0)
+    )
+
+```
+
+Now collect other factors.
+
+```{r}
+whoDataArtifact <- "paper30.pdf"
+whoSource <- "https://www.who.int/healthinfo"
+localDataDir <- "data"
+urlEndpoint <- paste(whoSource, whoDataArtifact, sep="/")
+pdfFilePath <- paste(localDataDir, whoDataArtifact, sep="/")
+download.file(urlEndpoint, pdfFilePath)
+
+```
+
+
+```{r}
+library(pdftools)
+library(dplyr)
+library(countrycode)
+ 
+# the table is broken into parts starting on page 18 and ending on page 19
+table_text <-""
+for(page in c(18, 19, 20, 21)) {
+  table_part <- pdf_text(pdfFilePath)[page]
+  table_text <- paste(table_text, table_part, sep='\n')
+}
+
+# create a vector of lines
+lines <- strsplit(table_text, '\n')[[1]]
+
+# The first several lines are titles, headings, etc.
+lines <- lines[7:length(lines)]
+
+# Remove page number lines
+lines <- lines[!grepl("^[ ]*[12][0189]$", lines)]
+
+# Remove blank lines
+lines <- lines[!grepl("^$", lines)]
+
+# Fimd end reverse the order of country name and health care score
+lines <- sub("^[ ]*[0-9]+[0-9 -]*([^ ][^0-9]+[^ ])[ ]+([0-9.]+).*$", "\\2\t\\1", lines)
+
+# Strip starting whirespace from lines that don't contain numbers: they are line continuations of country names
+lines <- sub("^[ ]*([^ ][^0-9]+)$", "\\1", lines)
+
+# Re-attach remainder of country names to the initial part of names
+for (i in seq(from=1, to=length(lines)-1)) {
+  if (grepl("^[^0]", lines[i+1])) lines[i] <- paste(lines[i], lines[i+1])
+}
+
+# Remove the redundant lines
+lines <- lines[grepl("[0-9]", lines)]
+
+
+healthCareDataFrame <- as.data.frame(matrix(unlist(strsplit(lines,'\t')), ncol=2, byrow=TRUE))
+names(healthCareDataFrame) <- c("health_score", "country")
+healthCareDataFrame <- healthCareDataFrame %>%
+  mutate(health_score = as.numeric(health_score)) %>%
+  mutate(country_code= countrycode(country, origin="country.name", destination="iso3c"))
+healthCareDataFrame
+
+# There is a problem here in that Yugoslavia is listed as a country. THis has been broken up into several countries by now. So we'll use that number shared by all the new countries.     Bosnia and Herzegovina, Croatia, Macedonia, Montenegro, Serbia and Slovenia
+
+yugoScore <- healthCareDataFrame[healthCareDataFrame$country == "Yugoslavia",]$health_score
+healthCareDataFrame <- healthCareDataFrame[healthCareDataFrame$country != "Yugoslavia",]
+
+for (c in c("Bosnia and Herzegovina","Croatia", "Macedonia", "Montenegro", "Serbia", "Slovenia")) {
+  healthCareDataFrame <- rbind(healthCareDataFrame, c(yugoScore, c, countrycode(c , origin="country.name", destination="iso3c")))
+}
+healthCareDataFrame <- rbind(healthCareDataFrame, c(yugoScore, "Kosovo", "XXK"))
+
+healthCareDataFrame$country <- NULL
+
+augmentedDataFrame <- inner_join(trimmedDataFrame, healthCareDataFrame, by="country_code")
+augmentedDataFrame$date_reported <- NULL
+
+```
+
+```{r}
+library(broom)
+plot(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
+modelA <- lm(cases_per_100k ~ A, data=normalizedDataFrame)
+abline(modelA)
+tidy(modelA)
+cor(normalizedDataFrame$A,normalizedDataFrame$cases_per_100k)
+
+```
+First plot. Now we can get an initial look at 
+
+```{r}
+model_all <- lm(cases_per_100k ~ A + B + health_score, data=augmentedDataFrame)
+
+model_all
+```
+Now it  seems that there are some obvious outliers. Let's remove them by trimming those exceeding 3 standard deviations. Also, we are removing countries with no cases they could be this way because the country is too small, they have not been exposed to the virus, or the are failing to provide accurate reports.
+
+```{r}
+#find absolute value of z-score for each value in each column
+subDF <- normalizedDataFrame[,c("cases_per_100k","deaths_per_100k", "case_fatality")]
+z_scores <- as.data.frame(sapply(subDF, function(subDF) (abs(subDF-mean(subDF))/sd(subDF))))
+nonzero <- (subDF$cases_per_100k > 0) & (subDF$deaths_per_100k > 0)
+trimmedDataFrame <- normalizedDataFrame[!rowSums(z_scores>3) & nonzero,]
+```
+
+Now we would like to explore the data. First let's do some pretty maps.
+
+```{r}
+library(rworldmap)
+c19Map <- joinCountryData2Map(trimmedDataFrame, joinCode="ISO3", nameJoinColumn="country_code")
+
+mapCountryData(c19Map, nameColumnToPlot="cases_per_100k", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+mapCountryData(c19Map, nameColumnToPlot="deaths_per_100k", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+mapCountryData(c19Map, nameColumnToPlot="case_fatality", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+mapCountryData(c19Map, nameColumnToPlot="A", catMethod = "pretty",
+  missingCountryCol = gray(.8))
+
+```
+
+Now let's do a quick look at the relationship between pairs.
+
+```{r}
+
+pairs(~ cases_per_100k + deaths_per_100k + case_fatality + A + B + D, data=trimmedDataFrame)
+
+```
+Finally, let's repeat the regression on the outlier trimmed data.
+
+```{r}
+plot(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k))
+modelA1 <- lm(cases_per_100k ~ A, data=trimmedDataFrame)
+abline(modelA1)
+cor(trimmedDataFrame$A,trimmedDataFrame$cases_per_100k)
+tidy(modelA1)
+```
+
+```{r}
+plot(trimmedDataFrame$A,trimmedDataFrame$deaths_per_100k)
+modelA1d <- lm(deaths_per_100k ~ A, data=trimmedDataFrame)
+abline(modelA1d)
+cor(trimmedDataFrame$A,trimmedDataFrame$deaths_per_100k)
+tidy(modelA1d)
+```
+
+```{r}
+plot(trimmedDataFrame$A,trimmedDataFrame$case_fatality)
+modelA1f <- lm(case_fatality ~ A, data=trimmedDataFrame)
+abline(modelA1f)
+cor(trimmedDataFrame$A,trimmedDataFrame$case_fatality)
+tidy(modelA1f)
+```
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
+modelB1 <- lm(cases_per_100k ~ B, data=trimmedDataFrame)
+abline(modelB1)
+cor(trimmedDataFrame$B,trimmedDataFrame$cases_per_100k)
+tidy(modelB1)
+```
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$deaths_per_100k)
+modelB1d <- lm(deaths_per_100k ~ B, data=trimmedDataFrame)
+abline(modelB1d)
+cor(trimmedDataFrame$B,trimmedDataFrame$deaths_per_100k)
+tidy(modelB1d)
+```
+
+
+```{r}
+plot(trimmedDataFrame$B,trimmedDataFrame$case_fatality)
+modelB1f <- lm(case_fatality ~ B, data=trimmedDataFrame)
+abline(modelB1f)
+cor(trimmedDataFrame$B,trimmedDataFrame$case_fatality)
+tidy(modelB1f)
+```
+  
+```{r}
+plot(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+modelD1 <- lm(cases_per_100k ~ D, data=trimmedDataFrame)
+abline(modelD1)
+cor(trimmedDataFrame$D,trimmedDataFrame$cases_per_100k)
+tidy(modelD1)
+```
+
+
+```{r}
+plot(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
+modelD1d <- lm(deaths_per_100k ~ D, data=trimmedDataFrame)
+abline(modelD1d)
+cor(trimmedDataFrame$D,trimmedDataFrame$deaths_per_100k)
+tidy(modelD1d)
+```
+
+
+```{r}
+plot(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
+modelD1f <- lm(case_fatality ~ D, data=trimmedDataFrame)
+abline(modelD1f)
+cor(trimmedDataFrame$D,trimmedDataFrame$case_fatality)
+tidy(modelD1f)
+```
+
+# Summary
+
+The prevalence of A antibody in a population shows a very weak negative correlation with cumulative case counts and be prevalence of B antibody seems to have a weak positive correlation. Perhaps it would have been better to stick with blood types first to validate the cited studies. However, the negative correlation is consistent with the medical findings.
+
+More surprisingly, however, is that there seems to be an even stronger positive correlation with the B antibody which supports an A blood type disadvantage but not an AB blood type disadvantage. I have recently noticed this older study in [New England Journal of Medicine](https://www.nejm.org/doi/10.1056/NEJMoa2020283) that specifically points out type A blood as being more susceptible to the disease. That would be B antibody serum and that agrees with the positive correlation seen here.
+
+The Rh factor was included with this analysis. Having the D antibody seems to be a disadvantage for resistance to infection buy is entirely uncorrelated with case fatality. 
+
+Following up, I'd like to add other demographic factors such as quality of health care, population density, measures of wealth, ubanization, land area, etc. and do a multivariate analysis with re-sampled data to eliminate the other factors.
+
+
+
+
